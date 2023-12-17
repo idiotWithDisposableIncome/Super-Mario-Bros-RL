@@ -5,11 +5,12 @@ from agent import Agent
 from nes_py.wrappers import JoypadSpace
 from wrappers import apply_wrappers
 import os
+import re
 from utils import *
 import logging
 
 # Configure the logging system
-logging.basicConfig(filename='training.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='logs/training.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 if torch.cuda.is_available():
     print("Using CUDA device:", torch.cuda.get_device_name(0))
@@ -24,16 +25,18 @@ NUM_OF_EPISODES = 50_000
 SAVE_FRAMES_INTERVAL = 100
 
 env = gym_super_mario_bros.make(ENV_NAME, render_mode='human' if DISPLAY else 'rgb', apply_api_compatibility=True)
+env.metadata['render.modes'] = ['human','rgb_array']
 env = JoypadSpace(env, COMPLEX_MOVEMENT)
 
 env = apply_wrappers(env)
+agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
 
 models_dir = "models"
 subdirs = [d for d in os.listdir(models_dir) if os.path.isdir(os.path.join(models_dir, d))]
 
 if subdirs:
     # Find the most recent folder using the date and time in the folder name
-    most_recent_folder = max(subdirs, key=lambda x: re.match(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}", x).group())
+    most_recent_folder = max(subdirs, key=lambda x: (re.search(r"\d{4}-\d{2}-\d{2}-\d{2}_\d{2}_\d{2}", x) or "").group())
     most_recent_folder_path = os.path.join(models_dir, most_recent_folder)
 
     # Check if there is a saved model in the most recent folder
@@ -49,7 +52,7 @@ if subdirs:
     else:
         print(f"No saved models found in the most recent folder. Starting fresh.")
 else:
-    agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
+    
     print("No existing models. Starting fresh.")
 
 model_path = os.path.join("models", get_current_date_time_string())
