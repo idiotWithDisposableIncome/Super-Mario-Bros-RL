@@ -7,17 +7,25 @@ class SkipFrame(Wrapper):
     def __init__(self, env, skip):
         super().__init__(env)
         self.skip = skip
+        self.frames_log = []  # Track frames
+        self.actions_log = []  # Track actions
     
     def step(self, action):
         total_reward = 0.0
         done = False
         for _ in range(self.skip):
             next_state, reward, done, trunc, info = self.env.step(action)
+            self.frames_log.append(next_state.copy())
+            self.actions_log.append(action)
             total_reward += reward
             if done:
                 break
         return next_state, total_reward, done, trunc, info
-    
+    def reset(self, **kwargs):
+        state, info = self.env.reset(**kwargs)
+        self.frames_log = [state.copy()]
+        self.actions_log = [0]
+        return state, info
 
 def apply_wrappers(env):
     env = SkipFrame(env, skip=4) # Num of frames to apply one action to

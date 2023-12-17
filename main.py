@@ -1,19 +1,15 @@
 import torch
-
 import gym_super_mario_bros
-from gym_super_mario_bros.actions import RIGHT_ONLY
-
+from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
 from agent import Agent
-
 from nes_py.wrappers import JoypadSpace
 from wrappers import apply_wrappers
-
 import os
-
 from utils import *
+import logging
 
-model_path = os.path.join("models", get_current_date_time_string())
-os.makedirs(model_path, exist_ok=True)
+# Configure the logging system
+logging.basicConfig(filename='training.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 if torch.cuda.is_available():
     print("Using CUDA device:", torch.cuda.get_device_name(0))
@@ -23,15 +19,44 @@ else:
 ENV_NAME = 'SuperMarioBros-1-1-v0'
 SHOULD_TRAIN = True
 DISPLAY = True
-CKPT_SAVE_INTERVAL = 5000
+CKPT_SAVE_INTERVAL = 1000
 NUM_OF_EPISODES = 50_000
+SAVE_FRAMES_INTERVAL = 100
 
 env = gym_super_mario_bros.make(ENV_NAME, render_mode='human' if DISPLAY else 'rgb', apply_api_compatibility=True)
-env = JoypadSpace(env, RIGHT_ONLY)
+env = JoypadSpace(env, COMPLEX_MOVEMENT)
 
 env = apply_wrappers(env)
 
-agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
+models_dir = "models"
+subdirs = [d for d in os.listdir(models_dir) if os.path.isdir(os.path.join(models_dir, d))]
+
+if subdirs:
+    # Find the most recent folder using the date and time in the folder name
+    most_recent_folder = max(subdirs, key=lambda x: re.match(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}", x).group())
+    most_recent_folder_path = os.path.join(models_dir, most_recent_folder)
+
+    # Check if there is a saved model in the most recent folder
+    model_files = [f for f in os.listdir(most_recent_folder_path) if f.endswith('.pt')]
+
+    if model_files:
+        # Load the most recent model
+        model_files.sort()  # Sort to get the most recent model
+        latest_model_path = os.path.join(most_recent_folder_path, model_files[-1])
+        agent.load_model(latest_model_path)
+
+        print(f"Resuming training from the most recent model: {latest_model_path}")
+    else:
+        print(f"No saved models found in the most recent folder. Starting fresh.")
+else:
+    agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
+    print("No existing models. Starting fresh.")
+
+model_path = os.path.join("models", get_current_date_time_string())
+frames_save_path = os.path.join("frames", get_current_date_time_string())
+os.makedirs(model_path, exist_ok=True)
+os.makedirs(frames_save_path, exist_ok=True)
+
 
 if not SHOULD_TRAIN:
     folder_name = ""
@@ -60,11 +85,26 @@ for i in range(NUM_OF_EPISODES):
 
         state = new_state
 
+    if SHOULD_TRAIN and (i + 1) % SAVE_FRAMES_INTERVAL == 0:
+        frames_log = agent.get_frames_log()
+        save_frames_path = os.path.join(frames_save_path, f"frames_{i}")
+        os.makedirs(save_frames_path, exist_ok=True)
+
+        for j, frame in enumerate(frames_log):
+            frame_save_path = os.path.join(save_frames_path, f"frame_{j}.png")
+            # Upscale frame if needed and save
+            frame.save(frame_save_path)
+
+    logging.info(f"Episode {i + 1}: Total Reward = {total_reward}, Epsilon = {agent.epsilon}, Replay Buffer Size = {len(agent.replay_buffer)}")
     print("Total reward:", total_reward, "Epsilon:", agent.epsilon, "Size of replay buffer:", len(agent.replay_buffer), "Learn step counter:", agent.learn_step_counter)
 
     if SHOULD_TRAIN and (i + 1) % CKPT_SAVE_INTERVAL == 0:
         agent.save_model(os.path.join(model_path, "model_" + str(i + 1) + "_iter.pt"))
 
     print("Total reward:", total_reward)
+
+video_save_path = os.path.join("video", get_current_date_time_string())
+os.makedirs(frames_save_path, exist_ok=True)
+frames_to_video(video_save_path, "output_video.mp4",fps=30)
 
 env.close()

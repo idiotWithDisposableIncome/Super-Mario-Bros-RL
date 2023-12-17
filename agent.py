@@ -58,6 +58,9 @@ class Agent:
     
     def decay_epsilon(self):
         self.epsilon = max(self.epsilon * self.eps_decay, self.eps_min)
+    
+    def get_frames_log(self):
+        return self.replay_buffer.storage.frames_log
 
     def store_in_memory(self, state, action, reward, next_state, done):
         self.replay_buffer.add(TensorDict({
