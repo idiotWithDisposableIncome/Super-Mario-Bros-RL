@@ -6,14 +6,15 @@ from gym.wrappers import GrayScaleObservation, ResizeObservation, FrameStack
 class SkipFrame(Wrapper):
     def __init__(self, env, skip):
         super().__init__(env)
-        self.skip = skip
+        self._skip = skip
+        self.counter = 0
         self.frames_log = []  # Track frames
         self.actions_log = []  # Track actions
     
     def step(self, action):
         total_reward = 0.0
         done = False
-        for _ in range(self.skip):
+        for _ in range(self._skip):
             next_state, reward, done, trunc, info = self.env.step(action)
             self.frames_log.append(next_state.copy())
             self.actions_log.append(action)

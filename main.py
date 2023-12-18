@@ -1,6 +1,6 @@
 import torch
 import gym_super_mario_bros
-from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
+from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
 from agent import Agent
 from nes_py.wrappers import JoypadSpace
 from wrappers import apply_wrappers
@@ -8,8 +8,12 @@ import os
 import re
 from utils import *
 import logging
-
-# Configure the logging system
+import cv2
+#from PIL import Image
+#look into passing gpu to container - should be fine
+#mount docker volume 
+# Configure the logging system - docker will manage movement 
+#use 
 logging.basicConfig(filename='logs/training.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 if torch.cuda.is_available():
@@ -20,13 +24,17 @@ else:
 ENV_NAME = 'SuperMarioBros-1-1-v0'
 SHOULD_TRAIN = True
 DISPLAY = True
-CKPT_SAVE_INTERVAL = 1000
+CKPT_SAVE_INTERVAL = 1_000
 NUM_OF_EPISODES = 50_000
-SAVE_FRAMES_INTERVAL = 100
+SAVE_FRAMES_INTERVAL = 2
+#controllers = [Image.open(f"controllers/{i}.png") for i in range(5)]
+video_filename = 'gameplay_video.mp4'
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+video_writer = cv2.VideoWriter(video_filename, fourcc, 30.0, (600, 400))
 
 env = gym_super_mario_bros.make(ENV_NAME, render_mode='human' if DISPLAY else 'rgb', apply_api_compatibility=True)
 env.metadata['render.modes'] = ['human','rgb_array']
-env = JoypadSpace(env, COMPLEX_MOVEMENT)
+env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
 env = apply_wrappers(env)
 agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
@@ -56,10 +64,11 @@ else:
     print("No existing models. Starting fresh.")
 
 model_path = os.path.join("models", get_current_date_time_string())
-frames_save_path = os.path.join("frames", get_current_date_time_string())
+#frames_save_path = os.path.join("frames", get_current_date_time_string())
 os.makedirs(model_path, exist_ok=True)
-os.makedirs(frames_save_path, exist_ok=True)
 
+video_save_path = os.path.join("video", get_current_date_time_string())
+os.makedirs(video_save_path, exist_ok=True)
 
 if not SHOULD_TRAIN:
     folder_name = ""
@@ -81,6 +90,8 @@ for i in range(NUM_OF_EPISODES):
         a = agent.choose_action(state)
         new_state, reward, done, truncated, info  = env.step(a)
         total_reward += reward
+        frame = env.render()
+        video_writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
 
         if SHOULD_TRAIN:
             agent.store_in_memory(state, a, reward, new_state, done)
@@ -88,15 +99,15 @@ for i in range(NUM_OF_EPISODES):
 
         state = new_state
 
-    if SHOULD_TRAIN and (i + 1) % SAVE_FRAMES_INTERVAL == 0:
-        frames_log = agent.get_frames_log()
-        save_frames_path = os.path.join(frames_save_path, f"frames_{i}")
-        os.makedirs(save_frames_path, exist_ok=True)
+        if done:
 
-        for j, frame in enumerate(frames_log):
-            frame_save_path = os.path.join(save_frames_path, f"frame_{j}.png")
-            # Upscale frame if needed and save
-            frame.save(frame_save_path)
+            if SHOULD_TRAIN and (i + 1) % SAVE_FRAMES_INTERVAL == 0:
+                video_filename = os.path.join(video_save_path, f"game_{i + 1}.mp4")
+                #os.makedirs(save_frames_path, exist_ok=True)
+                video_writer.release()
+                # Set up a new video recording
+                # video_filename = f'gameplay_video_episode_{episode}.mp4'
+                video_writer = cv2.VideoWriter(video_filename, fourcc, 30.0, (600, 400))
 
     logging.info(f"Episode {i + 1}: Total Reward = {total_reward}, Epsilon = {agent.epsilon}, Replay Buffer Size = {len(agent.replay_buffer)}")
     print("Total reward:", total_reward, "Epsilon:", agent.epsilon, "Size of replay buffer:", len(agent.replay_buffer), "Learn step counter:", agent.learn_step_counter)
@@ -106,8 +117,9 @@ for i in range(NUM_OF_EPISODES):
 
     print("Total reward:", total_reward)
 
-video_save_path = os.path.join("video", get_current_date_time_string())
-os.makedirs(frames_save_path, exist_ok=True)
-frames_to_video(video_save_path, "output_video.mp4",fps=30)
+# offload this to another container 
+#video_save_path = os.path.join("video", get_current_date_time_string())
+#os.makedirs(frames_save_path, exist_ok=True)
+#frames_to_video(video_save_path, "output_video.mp4",fps=30)
 
 env.close()
