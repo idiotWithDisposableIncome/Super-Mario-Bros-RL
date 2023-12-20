@@ -4,6 +4,7 @@ from agent_nn import AgentNN
 
 from tensordict import TensorDict
 from torchrl.data import TensorDictReplayBuffer, LazyMemmapStorage
+from torch.optim.lr_scheduler import StepLR
 
 class Agent:
     def __init__(self, 
@@ -36,6 +37,7 @@ class Agent:
 
         # Optimizer and loss
         self.optimizer = torch.optim.Adam(self.online_network.parameters(), lr=self.lr)
+        self.scheduler = StepLR(self.optimizer, step_size=10000, gamma=0.5)
         self.loss = torch.nn.MSELoss()
         # self.loss = torch.nn.SmoothL1Loss() # Feel free to try this loss function instead!
 
@@ -108,6 +110,8 @@ class Agent:
 
         self.learn_step_counter += 1
         self.decay_epsilon()
+
+        self.scheduler.step()
 
 
         

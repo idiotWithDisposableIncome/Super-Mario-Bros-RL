@@ -1,10 +1,11 @@
 import torch
 from torch import nn
+import torch.nn as nn
 import numpy as np
 
 class AgentNN(nn.Module):
     def __init__(self, input_shape, n_actions, freeze=False):
-        super().__init__()
+        super(AgentNN, self).__init__()
         # Conolutional layers
         self.conv_layers = nn.Sequential(
             nn.Conv2d(input_shape[0], 32, kernel_size=8, stride=4),
@@ -18,12 +19,17 @@ class AgentNN(nn.Module):
         conv_out_size = self._get_conv_out(input_shape)
 
         # Linear layers
-        self.network = nn.Sequential(
-            self.conv_layers,
-            nn.Flatten(),
-            nn.Linear(conv_out_size, 512),
+        # Linear layers with separate value and advantage streams
+        self.value_stream = nn.Sequential(
+            nn.Linear(conv_out_size, 256),
             nn.ReLU(),
-            nn.Linear(512, n_actions)
+            nn.Linear(256, 1)
+        )
+
+        self.advantage_stream = nn.Sequential(
+            nn.Linear(conv_out_size, 256),
+            nn.ReLU(),
+            nn.Linear(256, n_actions)
         )
 
         if freeze:
@@ -33,7 +39,11 @@ class AgentNN(nn.Module):
         self.to(self.device)
 
     def forward(self, x):
-        return self.network(x)
+        conv_out = self.conv_layers(x).view(x.size()[0], -1)
+        value = self.value_stream(conv_out)
+        advantage = self.advantage_stream(conv_out)
+        q_values = value + (advantage - advantage.mean(dim=1, keepdim=True))
+        return q_values
 
     def _get_conv_out(self, shape):
         o = self.conv_layers(torch.zeros(1, *shape))
@@ -41,6 +51,6 @@ class AgentNN(nn.Module):
         return int(np.prod(o.size()))
     
     def _freeze(self):        
-        for p in self.network.parameters():
+        for p in self.parameters():
             p.requires_grad = False
     

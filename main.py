@@ -8,7 +8,7 @@ import os
 import re
 from utils import *
 import logging
-import cv2
+
 #from PIL import Image
 #look into passing gpu to container - should be fine
 #mount docker volume 
@@ -25,15 +25,15 @@ ENV_NAME = 'SuperMarioBros-1-1-v0'
 SHOULD_TRAIN = True
 DISPLAY = True
 CKPT_SAVE_INTERVAL = 1_000
-NUM_OF_EPISODES = 50_000
+NUM_OF_EPISODES = 10_000
 SAVE_FRAMES_INTERVAL = 2
 #controllers = [Image.open(f"controllers/{i}.png") for i in range(5)]
-video_filename = 'gameplay_video.mp4'
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-video_writer = cv2.VideoWriter(video_filename, fourcc, 30.0, (600, 400))
+#video_save_path = os.path.join("video-", get_current_date_time_string())
+#os.makedirs(video_save_path, exist_ok=True)
 
 env = gym_super_mario_bros.make(ENV_NAME, render_mode='human' if DISPLAY else 'rgb', apply_api_compatibility=True)
 env.metadata['render.modes'] = ['human','rgb_array']
+
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
 env = apply_wrappers(env)
@@ -67,8 +67,6 @@ model_path = os.path.join("models", get_current_date_time_string())
 #frames_save_path = os.path.join("frames", get_current_date_time_string())
 os.makedirs(model_path, exist_ok=True)
 
-video_save_path = os.path.join("video", get_current_date_time_string())
-os.makedirs(video_save_path, exist_ok=True)
 
 if not SHOULD_TRAIN:
     folder_name = ""
@@ -90,8 +88,8 @@ for i in range(NUM_OF_EPISODES):
         a = agent.choose_action(state)
         new_state, reward, done, truncated, info  = env.step(a)
         total_reward += reward
-        frame = env.render()
-        video_writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+        #env.record_frame()
+        
 
         if SHOULD_TRAIN:
             agent.store_in_memory(state, a, reward, new_state, done)
@@ -99,15 +97,6 @@ for i in range(NUM_OF_EPISODES):
 
         state = new_state
 
-        if done:
-
-            if SHOULD_TRAIN and (i + 1) % SAVE_FRAMES_INTERVAL == 0:
-                video_filename = os.path.join(video_save_path, f"game_{i + 1}.mp4")
-                #os.makedirs(save_frames_path, exist_ok=True)
-                video_writer.release()
-                # Set up a new video recording
-                # video_filename = f'gameplay_video_episode_{episode}.mp4'
-                video_writer = cv2.VideoWriter(video_filename, fourcc, 30.0, (600, 400))
 
     logging.info(f"Episode {i + 1}: Total Reward = {total_reward}, Epsilon = {agent.epsilon}, Replay Buffer Size = {len(agent.replay_buffer)}")
     print("Total reward:", total_reward, "Epsilon:", agent.epsilon, "Size of replay buffer:", len(agent.replay_buffer), "Learn step counter:", agent.learn_step_counter)
@@ -116,10 +105,5 @@ for i in range(NUM_OF_EPISODES):
         agent.save_model(os.path.join(model_path, "model_" + str(i + 1) + "_iter.pt"))
 
     print("Total reward:", total_reward)
-
-# offload this to another container 
-#video_save_path = os.path.join("video", get_current_date_time_string())
-#os.makedirs(frames_save_path, exist_ok=True)
-#frames_to_video(video_save_path, "output_video.mp4",fps=30)
 
 env.close()
