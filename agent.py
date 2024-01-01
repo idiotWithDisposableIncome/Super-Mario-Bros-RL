@@ -37,7 +37,7 @@ class Agent:
 
         # Optimizer and loss
         self.optimizer = torch.optim.Adam(self.online_network.parameters(), lr=self.lr)
-        self.scheduler = StepLR(self.optimizer, step_size=20000, gamma=0.99)
+        self.scheduler = StepLR(self.optimizer, step_size=20000, gamma=0.999)
         self.loss = torch.nn.MSELoss()
         # self.loss = torch.nn.SmoothL1Loss() # Feel free to try this loss function instead!
 
