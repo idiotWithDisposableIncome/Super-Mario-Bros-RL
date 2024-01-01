@@ -14,6 +14,18 @@ import logging
 #mount docker volume 
 # Configure the logging system - docker will manage movement 
 #use 
+def create_directory(directory_path):
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
+        print(f"Directory '{directory_path}' created.")
+    else:
+        print(f"Directory '{directory_path}' already exists.")
+
+
+LOGGING_PATH = 'logs'
+
+create_directory(LOGGING_PATH)
+
 logging.basicConfig(filename='logs/training.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 if torch.cuda.is_available():
@@ -40,6 +52,9 @@ env = apply_wrappers(env)
 agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
 
 models_dir = "models"
+
+create_directory(models_dir)
+
 subdirs = [d for d in os.listdir(models_dir) if os.path.isdir(os.path.join(models_dir, d))]
 
 if subdirs:
