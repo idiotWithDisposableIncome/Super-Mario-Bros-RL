@@ -23,7 +23,7 @@ else:
 
 ENV_NAME = 'SuperMarioBros-1-1-v0'
 SHOULD_TRAIN = True
-DISPLAY = True
+DISPLAY = False
 CKPT_SAVE_INTERVAL = 1_000
 NUM_OF_EPISODES = 10_000
 SAVE_FRAMES_INTERVAL = 2
@@ -31,7 +31,7 @@ SAVE_FRAMES_INTERVAL = 2
 #video_save_path = os.path.join("video-", get_current_date_time_string())
 #os.makedirs(video_save_path, exist_ok=True)
 
-env = gym_super_mario_bros.make(ENV_NAME, render_mode='human' if DISPLAY else 'rgb', apply_api_compatibility=True)
+env = gym_super_mario_bros.make(ENV_NAME, render_mode='human' if DISPLAY else 'rgb_array', apply_api_compatibility=True)
 env.metadata['render.modes'] = ['human','rgb_array']
 
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
@@ -98,9 +98,9 @@ for i in range(NUM_OF_EPISODES):
         state = new_state
 
 
-    logging.info(f"Episode {i + 1}: Total Reward = {total_reward}, Epsilon = {agent.epsilon}, Replay Buffer Size = {len(agent.replay_buffer)}")
-    print("Total reward:", total_reward, "Epsilon:", agent.epsilon, "Size of replay buffer:", len(agent.replay_buffer), "Learn step counter:", agent.learn_step_counter)
-
+    logging.info(f"Episode {i + 1}: Total Reward = {total_reward}, Epsilon = {agent.epsilon}, Replay Buffer Size = {len(agent.replay_buffer)}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
+    print("Total reward:", total_reward, "Epsilon:", agent.epsilon, "Size of replay buffer:", len(agent.replay_buffer), "Learn step counter:", agent.learn_step_counter, "Learn Rate:", agent.scheduler.get_last_lr()[0])
+    
     if SHOULD_TRAIN and (i + 1) % CKPT_SAVE_INTERVAL == 0:
         agent.save_model(os.path.join(model_path, "model_" + str(i + 1) + "_iter.pt"))
 

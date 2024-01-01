@@ -10,7 +10,7 @@ class Agent:
     def __init__(self, 
                  input_dims, 
                  num_actions, 
-                 lr=0.01, 
+                 lr=0.001, 
                  gamma=0.9, 
                  epsilon=1.0, 
                  eps_decay=0.99999975, 
@@ -37,7 +37,7 @@ class Agent:
 
         # Optimizer and loss
         self.optimizer = torch.optim.Adam(self.online_network.parameters(), lr=self.lr)
-        self.scheduler = StepLR(self.optimizer, step_size=10000, gamma=0.5)
+        self.scheduler = StepLR(self.optimizer, step_size=20000, gamma=0.99)
         self.loss = torch.nn.MSELoss()
         # self.loss = torch.nn.SmoothL1Loss() # Feel free to try this loss function instead!
 
