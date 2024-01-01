@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  my_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    runtime: nvidia
+    volumes:
+      - /mnt/nvme0:/nvme_drive
+    ports:
+      - "80:80"
