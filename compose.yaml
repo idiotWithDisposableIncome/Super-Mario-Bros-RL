@@ -4,7 +4,7 @@ services:
   my_app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: marioBros1
     runtime: nvidia
     volumes:
       - /mnt/nvme0:/nvme_drive
