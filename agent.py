@@ -10,7 +10,7 @@ class Agent:
     def __init__(self, 
                  input_dims, 
                  num_actions, 
-                 lr=0.001, 
+                 lr=0.0009, 
                  gamma=0.9, 
                  epsilon=1.0, 
                  eps_decay=0.99999975, 

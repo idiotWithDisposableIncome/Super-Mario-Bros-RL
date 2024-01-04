@@ -7,6 +7,7 @@ services:
       dockerfile: marioBros1
     runtime: nvidia
     volumes:
-      - /mnt/nvme0:/nvme_drive
+      - /mnt/nvme0/models:/app/models
+      - /mnt/nvme0/logs:/app/logs
     ports:
       - "80:80"
