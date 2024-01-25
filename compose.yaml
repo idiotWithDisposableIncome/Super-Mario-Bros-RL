@@ -10,4 +10,4 @@ services:
       - /mnt/nvme0/models:/app/models
       - /mnt/nvme0/logs:/app/logs
     ports:
-      - "80:80"
+      - "8080:80"
