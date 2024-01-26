@@ -8,6 +8,8 @@ import os
 import re
 from utils import *
 import logging
+import multiprocessing as mp
+
 
 #from PIL import Image
 #look into passing gpu to container - should be fine
@@ -20,6 +22,45 @@ def create_directory(directory_path):
         print(f"Directory '{directory_path}' created.")
     else:
         print(f"Directory '{directory_path}' already exists.")
+
+def environment_worker(env_id, agent, pipe):
+    env = gym_super_mario_bros.make(env_id, render_mode= 'rgb_array', apply_api_compatibility=True)
+    env = JoypadSpace(env, SIMPLE_MOVEMENT)
+    env = apply_wrappers(env)
+
+    state, _ = env.reset()
+    while True:
+        action = pipe.recv()  # Receive action from the main process
+        if action is None:    # None action indicates shutdown
+            break
+
+        next_state, reward, done, trunc, info = env.step(action)
+        if done:
+            next_state, _ = env.reset()
+
+        # Send observation, reward, and done flag back to the main process
+        pipe.send((next_state, reward, done, trunc, info))
+
+    env.close()
+
+def start_environments():
+    num_envs = 4  # Number of parallel environments
+    env_processes = []
+    parent_conns = []
+    child_conns = []
+    env_id = 'SuperMarioBros-1-1-v0'  # Environment ID
+
+    for _ in range(num_envs):
+        parent_conn, child_conn = mp.Pipe()
+        parent_conns.append(parent_conn)
+        child_conns.append(child_conn)
+        process = mp.Process(target=environment_worker, args=(env_id, child_conn))
+        process.start()
+        env_processes.append(process)
+
+    return env_processes, parent_conns
+
+env_processes, parent_conns = start_environments()
 
 
 LOGGING_PATH = 'logs'
@@ -34,20 +75,11 @@ else:
     print("CUDA is not available")
 
 ENV_NAME = 'SuperMarioBros-1-1-v0'
-SHOULD_TRAIN = True
-DISPLAY = False
-CKPT_SAVE_INTERVAL = 1_000
-NUM_OF_EPISODES = 50_000
-SAVE_FRAMES_INTERVAL = 2
-#controllers = [Image.open(f"controllers/{i}.png") for i in range(5)]
-#video_save_path = os.path.join("video-", get_current_date_time_string())
-#os.makedirs(video_save_path, exist_ok=True)
+CKPT_SAVE_INTERVAL = 5_000
+NUM_OF_EPISODES = 100_000
 
-env = gym_super_mario_bros.make(ENV_NAME, render_mode='human' if DISPLAY else 'rgb_array', apply_api_compatibility=True)
-env.metadata['render.modes'] = ['human','rgb_array']
-
+env = gym_super_mario_bros.make(ENV_NAME, render_mode='rgb_array', apply_api_compatibility=True)
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
-
 env = apply_wrappers(env)
 agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
 
@@ -82,43 +114,47 @@ model_path = os.path.join("models", get_current_date_time_string())
 #frames_save_path = os.path.join("frames", get_current_date_time_string())
 os.makedirs(model_path, exist_ok=True)
 
+for episode in range(NUM_OF_EPISODES):
 
-if not SHOULD_TRAIN:
-    folder_name = ""
-    ckpt_name = ""
-    agent.load_model(os.path.join("models", folder_name, ckpt_name))
-    agent.epsilon = 0.2
-    agent.eps_min = 0.0
-    agent.eps_decay = 0.0
+    # Reset states for all environments
+    states = [parent_conn.recv() for parent_conn in parent_conns]
+    total_average_reward = 0
+    current_total_reward = 0
+    while not all_done:
+        actions = [agent.choose_action(state) for state in states]
+        for action, parent_conn in zip(actions, parent_conns):
+            parent_conn.send(action)
 
-env.reset()
-next_state, reward, done, trunc, info = env.step(action=0)
+        # Collect results from all environments
+        results = [parent_conn.recv() for parent_conn in parent_conns]
+        next_states, rewards, dones, truncs, infos = zip(*results)
 
-for i in range(NUM_OF_EPISODES):    
-    print("Episode:", i)
-    done = False
-    state, _ = env.reset()
-    total_reward = 0
-    while not done:
-        a = agent.choose_action(state)
-        new_state, reward, done, truncated, info  = env.step(a)
-        total_reward += reward
-        #env.record_frame()
-        
+        # Update agent here with experiences from all environments
+        # agent.learn(...)
+        experiences = []
+        for result in results:
+            next_state, reward, done, trunc, info = result
+            current_total_reward = current_total_reward + reward
+            experiences.append((state, action, reward, next_state, done))
 
-        if SHOULD_TRAIN:
-            agent.store_in_memory(state, a, reward, new_state, done)
-            agent.learn()
+        total_average_reward = total_average_reward + ( current_total_reward / 4 )
+        current_total_reward = 0
 
-        state = new_state
+        # Update model with experiences from all environments
+        agent.handle_experiences(experiences)
 
-
-    logging.info(f"Episode {i + 1}: Total Reward = {total_reward}, Epsilon = {agent.epsilon}, Replay Buffer Size = {len(agent.replay_buffer)}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
-    print("Total reward:", total_reward, "Epsilon:", agent.epsilon, "Size of replay buffer:", len(agent.replay_buffer), "Learn step counter:", agent.learn_step_counter, "Learn Rate:", agent.scheduler.get_last_lr()[0])
+        states = next_states
+        all_done = all(dones)
     
-    if SHOULD_TRAIN and (i + 1) % CKPT_SAVE_INTERVAL == 0:
-        agent.save_model(os.path.join(model_path, "model_" + str(i + 1) + "_iter.pt"))
 
-    print("Total reward:", total_reward)
+    logging.info(f"Episode {episode}: Total Ave Reward = {total_average_reward}, Epsilon = {agent.epsilon}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
+    
+    
+    if (episode + 1) % CKPT_SAVE_INTERVAL == 0:
+        agent.save_model(os.path.join(model_path, "model_" + str(episode + 1) + "_iter.pt"))
 
-env.close()
+for parent_conn in parent_conns:
+    parent_conn.send(None)  # Send shutdown signal
+
+for process in env_processes:
+    process.join()

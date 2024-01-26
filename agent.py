@@ -70,6 +70,11 @@ class Agent:
                                             "done": torch.tensor(done)
                                           }, batch_size=[]))
         
+    def handle_experiences(self, experiences):
+        for state, action, reward, next_state, done in experiences:
+            self.store_in_memory(state, action, reward, next_state, done)
+        self.learn()
+        
     def sync_networks(self):
         if self.learn_step_counter % self.sync_network_rate == 0 and self.learn_step_counter > 0:
             self.target_network.load_state_dict(self.online_network.state_dict())
