@@ -23,25 +23,33 @@ def create_directory(directory_path):
     else:
         print(f"Directory '{directory_path}' already exists.")
 
-def environment_worker(env_id, agent, pipe):
-    env = gym_super_mario_bros.make(env_id, render_mode= 'rgb_array', apply_api_compatibility=True)
-    env = JoypadSpace(env, SIMPLE_MOVEMENT)
-    env = apply_wrappers(env)
+def environment_worker(env_id, pipe):
+    try:
+        print("Worker started")
+        env = gym_super_mario_bros.make(env_id, render_mode= 'rgb_array', apply_api_compatibility=True)
+        env = JoypadSpace(env, SIMPLE_MOVEMENT)
+        env = apply_wrappers(env)
 
-    state, _ = env.reset()
-    while True:
-        action = pipe.recv()  # Receive action from the main process
-        if action is None:    # None action indicates shutdown
-            break
+        print("Environment initialized")
 
-        next_state, reward, done, trunc, info = env.step(action)
-        if done:
-            next_state, _ = env.reset()
+        state = env.reset()
+        pipe.send((state))  # Send initial state to the main process
 
-        # Send observation, reward, and done flag back to the main process
-        pipe.send((next_state, reward, done, trunc, info))
-
-    env.close()
+        print("Environment reset")  # Confirm environment reset
+        while True:
+            action = pipe.recv()  # Receive action from the main process
+            if action is None:    # None action indicates shutdown
+                break
+            next_state, reward, done, trunc, info = env.step(action)
+            if done:
+                next_state, _ = env.reset()
+            # Send observation, reward, and done flag back to the main process
+            pipe.send((next_state, reward, done, trunc, info))
+    except Exception as e:
+        print(f"Worker encountered an error: {e}")
+        pipe.send(("error",str(e)))  # Send shutdown signal 
+    finally:
+        env.close()
 
 def start_environments():
     num_envs = 4  # Number of parallel environments
@@ -118,41 +126,35 @@ if __name__ == '__main__':
     for episode in range(NUM_OF_EPISODES):
 
         # Reset states for all environments
-        states = [parent_conn.recv() for parent_conn in parent_conns]
-        total_average_reward = 0
-        current_total_reward = 0
+        total_rewards = [0] * len(parent_conns)
+        all_done = [False] * len(parent_conns)
+        states = [None] * len(parent_conns)
+
+        for index, parent_conn in enumerate(parent_conns):
+            #parent_conn.send(None)  # Sending a dummy action to start the environment
+            states[index] = parent_conn.recv()
+
         while not all_done:
-            actions = [agent.choose_action(state) for state in states]
+            actions = [agent.choose_action(state) if not done else None for state, done in zip(states, all_done)]
             for action, parent_conn in zip(actions, parent_conns):
-                parent_conn.send(action)
+                if action is not None:
+                    parent_conn.send(action)
 
-            # Collect results from all environments
-            results = [parent_conn.recv() for parent_conn in parent_conns]
-            next_states, rewards, dones, truncs, infos = zip(*results)
+            for index, parent_conn in enumerate(parent_conns):
+                if not all_done[index]:
+                    next_state, reward, done, trunc, info = parent_conn.recv()
+                    total_rewards[index] += reward
+                    if done:
+                        next_state, _ = parent_conn.recv()  # Reset and get new initial state
+                        all_done[index] = True
+                    experiences = (states[index], actions[index], reward, next_state, done)
+                    agent.handle_experiences([experiences])
+                    states[index] = next_state
 
-            # Update agent here with experiences from all environments
-            # agent.learn(...)
-            experiences = []
-            for result in results:
-                next_state, reward, done, trunc, info = result
-                current_total_reward = current_total_reward + reward
-                experiences.append((state, action, reward, next_state, done))
-
-            total_average_reward = total_average_reward + ( current_total_reward / 4 )
-            current_total_reward = 0
-
-            # Update model with experiences from all environments
-            agent.handle_experiences(experiences)
-
-            states = next_states
-            all_done = all(dones)
-        
-
-        logging.info(f"Episode {episode}: Total Ave Reward = {total_average_reward}, Epsilon = {agent.epsilon}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
-        
+        logging.info(f"Episode {episode}: Total Average Reward = {sum(total_rewards)/len(total_rewards)}, Epsilon = {agent.epsilon}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
         
         if (episode + 1) % CKPT_SAVE_INTERVAL == 0:
-            agent.save_model(os.path.join(model_path, "model_" + str(episode + 1) + "_iter.pt"))
+            agent.save_model(os.path.join(model_path, f"model_{episode + 1}_iter.pt"))
 
     for parent_conn in parent_conns:
         parent_conn.send(None)  # Send shutdown signal
