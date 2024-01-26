@@ -60,101 +60,102 @@ def start_environments():
 
     return env_processes, parent_conns
 
-env_processes, parent_conns = start_environments()
+if __name__ == '__main__':
+    
+    LOGGING_PATH = 'logs'
 
+    create_directory(LOGGING_PATH)
 
-LOGGING_PATH = 'logs'
+    logging.basicConfig(filename='logs/training.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-create_directory(LOGGING_PATH)
-
-logging.basicConfig(filename='logs/training.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-if torch.cuda.is_available():
-    print("Using CUDA device:", torch.cuda.get_device_name(0))
-else:
-    print("CUDA is not available")
-
-ENV_NAME = 'SuperMarioBros-1-1-v0'
-CKPT_SAVE_INTERVAL = 5_000
-NUM_OF_EPISODES = 100_000
-
-env = gym_super_mario_bros.make(ENV_NAME, render_mode='rgb_array', apply_api_compatibility=True)
-env = JoypadSpace(env, SIMPLE_MOVEMENT)
-env = apply_wrappers(env)
-agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
-
-models_dir = "models"
-
-create_directory(models_dir)
-
-subdirs = [d for d in os.listdir(models_dir) if os.path.isdir(os.path.join(models_dir, d))]
-
-if subdirs:
-    # Find the most recent folder using the date and time in the folder name
-    most_recent_folder = max(subdirs, key=lambda x: (re.search(r"\d{4}-\d{2}-\d{2}-\d{2}_\d{2}_\d{2}", x) or "").group())
-    most_recent_folder_path = os.path.join(models_dir, most_recent_folder)
-
-    # Check if there is a saved model in the most recent folder
-    model_files = [f for f in os.listdir(most_recent_folder_path) if f.endswith('.pt')]
-
-    if model_files:
-        # Load the most recent model
-        model_files.sort()  # Sort to get the most recent model
-        latest_model_path = os.path.join(most_recent_folder_path, model_files[-1])
-        agent.load_model(latest_model_path)
-
-        print(f"Resuming training from the most recent model: {latest_model_path}")
+    if torch.cuda.is_available():
+        print("Using CUDA device:", torch.cuda.get_device_name(0))
     else:
-        print(f"No saved models found in the most recent folder. Starting fresh.")
-else:
-    
-    print("No existing models. Starting fresh.")
+        print("CUDA is not available")
 
-model_path = os.path.join("models", get_current_date_time_string())
-#frames_save_path = os.path.join("frames", get_current_date_time_string())
-os.makedirs(model_path, exist_ok=True)
+    ENV_NAME = 'SuperMarioBros-1-1-v0'
+    CKPT_SAVE_INTERVAL = 5_000
+    NUM_OF_EPISODES = 100_000
 
-for episode in range(NUM_OF_EPISODES):
+    env = gym_super_mario_bros.make(ENV_NAME, render_mode='rgb_array', apply_api_compatibility=True)
+    env = JoypadSpace(env, SIMPLE_MOVEMENT)
+    env = apply_wrappers(env)
+    agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
 
-    # Reset states for all environments
-    states = [parent_conn.recv() for parent_conn in parent_conns]
-    total_average_reward = 0
-    current_total_reward = 0
-    while not all_done:
-        actions = [agent.choose_action(state) for state in states]
-        for action, parent_conn in zip(actions, parent_conns):
-            parent_conn.send(action)
+    models_dir = "models"
 
-        # Collect results from all environments
-        results = [parent_conn.recv() for parent_conn in parent_conns]
-        next_states, rewards, dones, truncs, infos = zip(*results)
+    create_directory(models_dir)
 
-        # Update agent here with experiences from all environments
-        # agent.learn(...)
-        experiences = []
-        for result in results:
-            next_state, reward, done, trunc, info = result
-            current_total_reward = current_total_reward + reward
-            experiences.append((state, action, reward, next_state, done))
+    subdirs = [d for d in os.listdir(models_dir) if os.path.isdir(os.path.join(models_dir, d))]
 
-        total_average_reward = total_average_reward + ( current_total_reward / 4 )
+    if subdirs:
+        # Find the most recent folder using the date and time in the folder name
+        most_recent_folder = max(subdirs, key=lambda x: (re.search(r"\d{4}-\d{2}-\d{2}-\d{2}_\d{2}_\d{2}", x) or "").group())
+        most_recent_folder_path = os.path.join(models_dir, most_recent_folder)
+
+        # Check if there is a saved model in the most recent folder
+        model_files = [f for f in os.listdir(most_recent_folder_path) if f.endswith('.pt')]
+
+        if model_files:
+            # Load the most recent model
+            model_files.sort()  # Sort to get the most recent model
+            latest_model_path = os.path.join(most_recent_folder_path, model_files[-1])
+            agent.load_model(latest_model_path)
+
+            print(f"Resuming training from the most recent model: {latest_model_path}")
+        else:
+            print(f"No saved models found in the most recent folder. Starting fresh.")
+    else:
+        
+        print("No existing models. Starting fresh.")
+
+    model_path = os.path.join("models", get_current_date_time_string())
+    #frames_save_path = os.path.join("frames", get_current_date_time_string())
+    os.makedirs(model_path, exist_ok=True)
+
+    env_processes, parent_conns = start_environments()
+
+    for episode in range(NUM_OF_EPISODES):
+
+        # Reset states for all environments
+        states = [parent_conn.recv() for parent_conn in parent_conns]
+        total_average_reward = 0
         current_total_reward = 0
+        while not all_done:
+            actions = [agent.choose_action(state) for state in states]
+            for action, parent_conn in zip(actions, parent_conns):
+                parent_conn.send(action)
 
-        # Update model with experiences from all environments
-        agent.handle_experiences(experiences)
+            # Collect results from all environments
+            results = [parent_conn.recv() for parent_conn in parent_conns]
+            next_states, rewards, dones, truncs, infos = zip(*results)
 
-        states = next_states
-        all_done = all(dones)
-    
+            # Update agent here with experiences from all environments
+            # agent.learn(...)
+            experiences = []
+            for result in results:
+                next_state, reward, done, trunc, info = result
+                current_total_reward = current_total_reward + reward
+                experiences.append((state, action, reward, next_state, done))
 
-    logging.info(f"Episode {episode}: Total Ave Reward = {total_average_reward}, Epsilon = {agent.epsilon}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
-    
-    
-    if (episode + 1) % CKPT_SAVE_INTERVAL == 0:
-        agent.save_model(os.path.join(model_path, "model_" + str(episode + 1) + "_iter.pt"))
+            total_average_reward = total_average_reward + ( current_total_reward / 4 )
+            current_total_reward = 0
 
-for parent_conn in parent_conns:
-    parent_conn.send(None)  # Send shutdown signal
+            # Update model with experiences from all environments
+            agent.handle_experiences(experiences)
 
-for process in env_processes:
-    process.join()
+            states = next_states
+            all_done = all(dones)
+        
+
+        logging.info(f"Episode {episode}: Total Ave Reward = {total_average_reward}, Epsilon = {agent.epsilon}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
+        
+        
+        if (episode + 1) % CKPT_SAVE_INTERVAL == 0:
+            agent.save_model(os.path.join(model_path, "model_" + str(episode + 1) + "_iter.pt"))
+
+    for parent_conn in parent_conns:
+        parent_conn.send(None)  # Send shutdown signal
+
+    for process in env_processes:
+        process.join()
