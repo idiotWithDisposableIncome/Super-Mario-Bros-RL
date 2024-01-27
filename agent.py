@@ -61,19 +61,37 @@ class Agent:
     def decay_epsilon(self):
         self.epsilon = max(self.epsilon * self.eps_decay, self.eps_min)
 
-    def store_in_memory(self, state, action, reward, next_state, done):
+    def store_in_memory(self, state_tensor, action, reward, next_state_tensor, done):
         self.replay_buffer.add(TensorDict({
-                                            "state": torch.tensor(np.array(state), dtype=torch.float32), 
-                                            "action": torch.tensor(action),
-                                            "reward": torch.tensor(reward), 
-                                            "next_state": torch.tensor(np.array(next_state), dtype=torch.float32), 
-                                            "done": torch.tensor(done)
-                                          }, batch_size=[]))
+            "state": state_tensor, 
+            "action": torch.tensor(action, dtype=torch.int64),
+            "reward": torch.tensor(reward, dtype=torch.float32), 
+            "next_state": next_state_tensor, 
+            "done": torch.tensor(done, dtype=torch.bool)
+        }, batch_size=[]))
         
     def handle_experiences(self, experiences):
         for state, action, reward, next_state, done in experiences:
-            self.store_in_memory(state, action, reward, next_state, done)
-        self.learn()
+            # Convert state and next_state to PyTorch tensors
+            state_tensor = self._prepare_state(state)
+            next_state_tensor = self._prepare_state(next_state)
+            
+            self.store_in_memory(state_tensor, action, reward, next_state_tensor, done)
+            self.learn()
+
+    def _prepare_state(self, state):
+
+        if isinstance(state, tuple):
+            state = state[0]  # If state is a tuple, extract the actual state
+        # Convert LazyFrames to numpy, reshape, and convert to tensor
+        state_np = np.array(state, dtype=np.float32) / 255.0  # Convert LazyFrames to numpy array
+        print(f"Shape after conversion to numpy: {state_np.shape}")  # Debug print
+        tensor = torch.tensor(state_np, dtype=torch.float32).to(self.online_network.device)
+        #state_np = state_np.transpose((2, 0, 1))  # Reshape to [channels * num_stacks, height, width]
+        #print(f"Shape after transpose: {state_np.shape}")  # Debug print
+        #tensor = torch.tensor(state_np).unsqueeze(0).to(self.online_network.device)
+        print(f"Shape after tensor conversion: {tensor.shape}")  # Debug print
+        return tensor
         
     def sync_networks(self):
         if self.learn_step_counter % self.sync_network_rate == 0 and self.learn_step_counter > 0:
@@ -89,7 +107,7 @@ class Agent:
     def learn(self):
         if len(self.replay_buffer) < self.batch_size:
             return
-        
+        print(f"Replay buffer size before sampling: {len(self.replay_buffer)}")  # Debug print
         self.sync_networks()
         
         self.optimizer.zero_grad()
@@ -99,6 +117,9 @@ class Agent:
         keys = ("state", "action", "reward", "next_state", "done")
 
         states, actions, rewards, next_states, dones = [samples[key] for key in keys]
+
+        states = states.squeeze(1)
+        print(f"Shape of batched states: {states.shape}")  # Debug print
 
         predicted_q_values = self.online_network(states) # Shape is (batch_size, n_actions)
         predicted_q_values = predicted_q_values[np.arange(self.batch_size), actions.squeeze()]

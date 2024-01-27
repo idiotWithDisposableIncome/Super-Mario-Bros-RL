@@ -6,6 +6,7 @@ from nes_py.wrappers import JoypadSpace
 from wrappers import apply_wrappers
 import os
 import re
+import numpy as np
 from utils import *
 import logging
 import multiprocessing as mp
@@ -32,17 +33,28 @@ def environment_worker(env_id, pipe):
 
         print("Environment initialized")
 
-        state = env.reset()
-        pipe.send((state))  # Send initial state to the main process
+        state, _ = env.reset()
+        print(f"Initial state type: {type(state)}, content: {state}")  # Debugging
+
+        pipe.send(state)  # Send initial state to the main process
 
         print("Environment reset")  # Confirm environment reset
         while True:
             action = pipe.recv()  # Receive action from the main process
+            print(f"Received action: {action}")  # Debug
+
             if action is None:    # None action indicates shutdown
-                break
+                next_state, info = env.reset()  # Reset the environment
+                pipe.send((next_state, 0, True, False, info))  # Send the new initial state back to the main process
+                continue
             next_state, reward, done, trunc, info = env.step(action)
+            print(f"Step result: {next_state}, {reward}, {done}, {trunc}, {info}")  # Debug
+
             if done:
-                next_state, _ = env.reset()
+                next_state, info = env.reset()
+                print(f"Reset state shape/type: {type(next_state)}, content: {next_state}")
+                pipe.send((next_state, 0, True, False, info))  # Send the new initial state back to the main process
+                continue
             # Send observation, reward, and done flag back to the main process
             pipe.send((next_state, reward, done, trunc, info))
     except Exception as e:
@@ -124,35 +136,58 @@ if __name__ == '__main__':
     env_processes, parent_conns = start_environments()
 
     for episode in range(NUM_OF_EPISODES):
-
-        # Reset states for all environments
+        # Initialize rewards and done flags for all environments
         total_rewards = [0] * len(parent_conns)
         all_done = [False] * len(parent_conns)
         states = [None] * len(parent_conns)
 
+        # Start each environment and receive initial states
         for index, parent_conn in enumerate(parent_conns):
-            #parent_conn.send(None)  # Sending a dummy action to start the environment
-            states[index] = parent_conn.recv()
+            state = parent_conn.recv()
+            state = np.array(state)
+            states[index] = state
+            print(f"Initial state received for environment {index}")
 
-        while not all_done:
+        # Main training loop for each episode
+        while not all(all_done):
+            # Choose actions for each environment
             actions = [agent.choose_action(state) if not done else None for state, done in zip(states, all_done)]
-            for action, parent_conn in zip(actions, parent_conns):
-                if action is not None:
-                    parent_conn.send(action)
+            print(f"Actions chosen: {actions}")
 
+            # Send actions to environments and receive results
+            for index, (action, parent_conn) in enumerate(zip(actions, parent_conns)):
+                if not all_done[index] and action is not None:  # Check if environment is done
+                    parent_conn.send(action)
+                    print(f"Action {action} sent to environment {index}")
+                elif all_done[index]:
+                    print(f"No action sent to environment {index} as it is done")
+
+            # Process results from each environment
             for index, parent_conn in enumerate(parent_conns):
                 if not all_done[index]:
                     next_state, reward, done, trunc, info = parent_conn.recv()
-                    total_rewards[index] += reward
-                    if done:
-                        next_state, _ = parent_conn.recv()  # Reset and get new initial state
-                        all_done[index] = True
+                    print(f"Result received from environment {index}: Reward: {reward}, Done: {done}")
+
                     experiences = (states[index], actions[index], reward, next_state, done)
                     agent.handle_experiences([experiences])
-                    states[index] = next_state
+                    # Reset environment if needed
+                    if done:
+                        print(f"Resetting environment {index}")
+                        parent_conn.send(None)  # Send reset signal
+                        next_state = parent_conn.recv()  # Receive initial state post-reset
+                        print(f"Reset state received for environment {next_state}")
+                        total_rewards[index] = 0
+                        all_done[index] = False  # Reset the done flag
 
+                    # Store experiences and update agent
+                    states[index] = next_state
+                    total_rewards[index] += reward
+
+            # Log episode results
+        average_reward = sum(total_rewards) / len(total_rewards)
         logging.info(f"Episode {episode}: Total Average Reward = {sum(total_rewards)/len(total_rewards)}, Epsilon = {agent.epsilon}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
-        
+        print(f"Episode {episode}: Total Average Reward = {sum(total_rewards)/len(total_rewards)}, Epsilon = {agent.epsilon}, Learn Rate = {agent.scheduler.get_last_lr()[0]}")
+
         if (episode + 1) % CKPT_SAVE_INTERVAL == 0:
             agent.save_model(os.path.join(model_path, f"model_{episode + 1}_iter.pt"))
 
