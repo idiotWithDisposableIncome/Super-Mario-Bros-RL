@@ -39,7 +39,7 @@ class AgentNN(nn.Module):
         self.to(self.device)
 
     def forward(self, x):
-        print(f"Input shape to CNN: {x.shape}")  # Debug print
+        #print(f"Input shape to CNN: {x.shape}")  # Debug print
         conv_out = self.conv_layers(x).view(x.size()[0], -1)
         value = self.value_stream(conv_out)
         advantage = self.advantage_stream(conv_out)

@@ -85,12 +85,12 @@ class Agent:
             state = state[0]  # If state is a tuple, extract the actual state
         # Convert LazyFrames to numpy, reshape, and convert to tensor
         state_np = np.array(state, dtype=np.float32) / 255.0  # Convert LazyFrames to numpy array
-        print(f"Shape after conversion to numpy: {state_np.shape}")  # Debug print
+        #print(f"Shape after conversion to numpy: {state_np.shape}")  # Debug print
         tensor = torch.tensor(state_np, dtype=torch.float32).to(self.online_network.device)
         #state_np = state_np.transpose((2, 0, 1))  # Reshape to [channels * num_stacks, height, width]
         #print(f"Shape after transpose: {state_np.shape}")  # Debug print
         #tensor = torch.tensor(state_np).unsqueeze(0).to(self.online_network.device)
-        print(f"Shape after tensor conversion: {tensor.shape}")  # Debug print
+        #print(f"Shape after tensor conversion: {tensor.shape}")  # Debug print
         return tensor
         
     def sync_networks(self):
@@ -107,7 +107,7 @@ class Agent:
     def learn(self):
         if len(self.replay_buffer) < self.batch_size:
             return
-        print(f"Replay buffer size before sampling: {len(self.replay_buffer)}")  # Debug print
+        #print(f"Replay buffer size before sampling: {len(self.replay_buffer)}")  # Debug print
         self.sync_networks()
         
         self.optimizer.zero_grad()
@@ -119,7 +119,7 @@ class Agent:
         states, actions, rewards, next_states, dones = [samples[key] for key in keys]
 
         states = states.squeeze(1)
-        print(f"Shape of batched states: {states.shape}")  # Debug print
+        #print(f"Shape of batched states: {states.shape}")  # Debug print
 
         predicted_q_values = self.online_network(states) # Shape is (batch_size, n_actions)
         predicted_q_values = predicted_q_values[np.arange(self.batch_size), actions.squeeze()]
