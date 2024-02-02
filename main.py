@@ -24,30 +24,32 @@ def create_directory(directory_path):
     else:
         print(f"Directory '{directory_path}' already exists.")
 
-def environment_worker(env_id, pipe):
+def environment_worker(env_id, pipe, index):
     try:
         env = gym_super_mario_bros.make(env_id, render_mode='rgb_array', apply_api_compatibility=True)
         env = JoypadSpace(env, SIMPLE_MOVEMENT)
-        env = apply_wrappers(env)
+        env = apply_wrappers(env, index=index)
         state, _ = env.reset()
         pipe.send(state)  # Send initial state to the main process
 
         while True:
             action = pipe.recv()  # Receive action from the main process
-            if action == "shutdown":
+            if action == None:
                 break  # Shutdown signal received
 
             next_state, reward, done, trunc, info = env.step(action)
-            
+            #print(f"worker done state after step: {done} environmentId: {index}")
             if done:
                 next_state, _ = env.reset()
+                #print(f"Worker {index} resetting environment.")
                 pipe.send((state, action, reward, next_state, done))  # Send experience back to the main process
+                #print(f"worker done state after reset: {done} environmentId: {index}")
                 state = next_state  # Update state to the new initial state
             else:
                 pipe.send((state, action, reward, next_state, done))  # Send experience back to the main process
                 state = next_state
     except Exception as e:
-        print(f"Worker encountered an error: {e}")
+        print(f"Worker {index} encountered an error: {e}")
         pipe.send(("error",str(e)))  # Send shutdown signal 
     finally:
         env.close()
@@ -59,11 +61,11 @@ def start_environments():
     child_conns = []
     env_id = 'SuperMarioBros-1-1-v0'  # Environment ID
 
-    for _ in range(num_envs):
+    for i in range(num_envs):
         parent_conn, child_conn = mp.Pipe()
         parent_conns.append(parent_conn)
         child_conns.append(child_conn)
-        process = mp.Process(target=environment_worker, args=(env_id, child_conn))
+        process = mp.Process(target=environment_worker, args=(env_id, child_conn, i))
         process.start()
         env_processes.append(process)
 
@@ -139,7 +141,13 @@ if __name__ == '__main__':
             parent_conn.send(action)  # Send action to the environment worker
 
             if parent_conn.poll():  # Check if there's a message from the worker
-                state, action, reward, next_state, done = parent_conn.recv()
+                message = parent_conn.recv()
+                if isinstance(message, tuple) and isinstance(message[0], str):
+                    if message[0] == "error":
+                        # Handle error
+                        print(f"Error received from worker {index}: {message[1]}")
+
+                state, action, reward, next_state, done = message
                 agent.handle_experiences([(state, action, reward, next_state, done)])
                 total_rewards_current_episode[index] += reward
                 states[index] = next_state
@@ -152,13 +160,13 @@ if __name__ == '__main__':
                     average_total_reward = total_reward / sum(total_episodes_played)
                     #average reward for this environment
                     env_average_total_reward[index] = total_rewards_current_episode[index] / total_episodes_played[index]
-                    #reset reward for this environment
-                    total_rewards_current_episode[index] = 0
                     #log the rewards and save the model if it is time
                     if total_episodes_played[index] % CKPT_SAVE_INTERVAL == 0:
                         agent.save_model(os.path.join(model_path, f"model_processor_{index}_episode_{total_episodes_played[index]}.pt"))
                     logging.info(f"Processor {index}, Episode {total_episodes_played[index]}:  Env Average Reward = {env_average_total_reward[index]}, Total Episode Reward = {total_rewards_current_episode[index]}, Model Average Total Reward = {average_total_reward}")
                     print(f"Processor {index}, Episode {total_episodes_played[index]}:  Env Average Reward = {env_average_total_reward[index]}, Total Episode Reward = {total_rewards_current_episode[index]}, Model Average Total Reward = {average_total_reward}")
+                    #reset reward for this environment
+                    total_rewards_current_episode[index] = 0
         # Choose and send next actions to each environment
         for index, parent_conn in enumerate(parent_conns):
             if not parent_conn.poll():  # Only send action if the worker is ready
