@@ -36,7 +36,7 @@ def environment_worker(env_id, pipe, index):
             action = pipe.recv()  # Receive action from the main process
             if action == None:
                 break  # Shutdown signal received
-
+            #print(f"worker {index} received Action: {action} ")
             next_state, reward, done, trunc, info = env.step(action)
             #print(f"worker done state after step: {done} environmentId: {index}")
             if done:
@@ -130,36 +130,47 @@ if __name__ == '__main__':
     total_reward = 0
     average_total_reward = 0
     env_average_total_reward = [0] * len(parent_conns)
-
+    env_total_reward = [0] * len(parent_conns)
     # Initial receipt of state from each environment
+    env_dif = [0] * len(parent_conns)
     states = [parent_conn.recv() for parent_conn in parent_conns]
 
     while sum(total_episodes_played) < NUM_OF_EPISODES:
         # Collect experiences from each environment
         for index, parent_conn in enumerate(parent_conns):
+
             action = agent.choose_action(states[index])
-            parent_conn.send(action)  # Send action to the environment worker
+            if env_dif[index] == 0:
+                env_dif[index] += 1
+                #print(f"Main loop sending action in top loop for worker {index} action: {action}")
+                parent_conn.send(action)  # Send action to the environment worker
 
             if parent_conn.poll():  # Check if there's a message from the worker
+                env_dif[index] += -1
                 message = parent_conn.recv()
+                
                 if isinstance(message, tuple) and isinstance(message[0], str):
                     if message[0] == "error":
                         # Handle error
                         print(f"Error received from worker {index}: {message[1]}")
 
                 state, action, reward, next_state, done = message
+                #print(f"Main loop recv exp from worker {index} done: {done} action: {action}")
                 agent.handle_experiences([(state, action, reward, next_state, done)])
                 total_rewards_current_episode[index] += reward
                 states[index] = next_state
                 if done:
+                    env_dif[index] = 0
                     # total episodes played for this environment
                     total_episodes_played[index] += 1
                     #overall total reward
                     total_reward += total_rewards_current_episode[index]
+                    #set env total reward
+                    env_total_reward[index] += total_rewards_current_episode[index]
                     #overall average reward
                     average_total_reward = total_reward / sum(total_episodes_played)
                     #average reward for this environment
-                    env_average_total_reward[index] = total_rewards_current_episode[index] / total_episodes_played[index]
+                    env_average_total_reward[index] = env_total_reward[index] / total_episodes_played[index]
                     #log the rewards and save the model if it is time
                     if total_episodes_played[index] % CKPT_SAVE_INTERVAL == 0:
                         agent.save_model(os.path.join(model_path, f"model_processor_{index}_episode_{total_episodes_played[index]}.pt"))
@@ -167,12 +178,6 @@ if __name__ == '__main__':
                     print(f"Processor {index}, Episode {total_episodes_played[index]}:  Env Average Reward = {env_average_total_reward[index]}, Total Episode Reward = {total_rewards_current_episode[index]}, Model Average Total Reward = {average_total_reward}")
                     #reset reward for this environment
                     total_rewards_current_episode[index] = 0
-        # Choose and send next actions to each environment
-        for index, parent_conn in enumerate(parent_conns):
-            if not parent_conn.poll():  # Only send action if the worker is ready
-                state = states[index] # Get the current state for this environment
-                action = agent.choose_action(state)
-                parent_conn.send(action)
 
     for parent_conn in parent_conns:
         parent_conn.send(None)  # Send shutdown signal

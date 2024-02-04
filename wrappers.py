@@ -17,7 +17,7 @@ class SkipFrame(Wrapper):
         for _ in range(self._skip):
             try:
                 next_state, reward, done, trunc, info = self.env.step(action)
-                #print(f"skipwrapper for worker: {self.index}  done state after step: {done} trunc state after step: {trunc}")
+                #print(f"skipwrapper for worker: {self.index}  done state after step: {done} info: {info}")
                 total_reward += reward
                 if done:
                     break
