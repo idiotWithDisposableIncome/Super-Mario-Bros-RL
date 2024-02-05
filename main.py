@@ -40,8 +40,12 @@ def environment_worker(env_id, pipe, index):
             next_state, reward, done, trunc, info = env.step(action)
             #print(f"worker done state after step: {done} environmentId: {index}")
             if done:
-                next_state, _ = env.reset()
-                #print(f"Worker {index} resetting environment.")
+                if not trunc:
+                    next_state, _ = env.reset()
+                    #print(f"Worker {index} resetting environment.")
+                else:
+                    print(f"Worker {index} forced reset")
+                
                 pipe.send((state, action, reward, next_state, done))  # Send experience back to the main process
                 #print(f"worker done state after reset: {done} environmentId: {index}")
                 state = next_state  # Update state to the new initial state
@@ -85,7 +89,7 @@ if __name__ == '__main__':
         print("CUDA is not available")
 
     ENV_NAME = 'SuperMarioBros-1-1-v0'
-    CKPT_SAVE_INTERVAL = 5_000
+    CKPT_SAVE_INTERVAL = 20_000
     NUM_OF_EPISODES = 100_000
 
     env = gym_super_mario_bros.make(ENV_NAME, render_mode='rgb_array', apply_api_compatibility=True)
@@ -172,7 +176,7 @@ if __name__ == '__main__':
                     #average reward for this environment
                     env_average_total_reward[index] = env_total_reward[index] / total_episodes_played[index]
                     #log the rewards and save the model if it is time
-                    if total_episodes_played[index] % CKPT_SAVE_INTERVAL == 0:
+                    if sum(total_episodes_played) % CKPT_SAVE_INTERVAL == 0:
                         agent.save_model(os.path.join(model_path, f"model_processor_{index}_episode_{total_episodes_played[index]}.pt"))
                     logging.info(f"Processor {index}, Episode {total_episodes_played[index]}:  Env Average Reward = {env_average_total_reward[index]}, Total Episode Reward = {total_rewards_current_episode[index]}, Model Average Total Reward = {average_total_reward}")
                     print(f"Processor {index}, Episode {total_episodes_played[index]}:  Env Average Reward = {env_average_total_reward[index]}, Total Episode Reward = {total_rewards_current_episode[index]}, Model Average Total Reward = {average_total_reward}")
