@@ -9,6 +9,7 @@ class SkipFrame(Wrapper):
         self._skip = skip
         self.index = index
         self.counter = 0
+        self.prev_info = None
     
     def step(self, action):
         total_reward = 0.0
@@ -18,7 +19,9 @@ class SkipFrame(Wrapper):
             try:
                 next_state, reward, done, trunc, info = self.env.step(action)
                 #print(f"skipwrapper for worker: {self.index}  done state after step: {done} action: {action}")
-                total_reward += reward
+                if self.prev_info is not None:
+                    total_reward += self.calculate_reward(info, done)
+                self.prev_info = info
                 if done:
                     break
             except Exception as e:
@@ -27,11 +30,53 @@ class SkipFrame(Wrapper):
                 done = True  # Set done to True as the episode has ended
                 trunc = True
                 info = {}
+                total_reward -= 100
                 break 
         return next_state, total_reward, done, trunc, info
     def reset(self, **kwargs):
         state, info = self.env.reset(**kwargs)
         return state, info
+
+    def calculate_reward(self, info, done):
+        reward = 0
+        # Progression
+        reward += info['x_pos'] - self.prev_info['x_pos']
+
+        # Coins
+        reward += (info['coins'] - self.prev_info['coins']) * 1
+
+        # Flag Get (end of level)
+        if info['flag_get']:
+            reward += 100
+
+        # Lives
+        reward -= (self.prev_info['life'] - info['life']) * 100
+
+        # Score
+        reward += max(-25, min((info['score'] - self.prev_info['score'] ) * 1, 25))
+
+        # Time Penalty
+        reward -= (self.prev_info['time'] - info['time']) * 1
+
+        # Check for power-up status change (small, tall, fire)
+        if info['status'] != self.prev_info['status']:
+            if info['status'] != 'small':
+                reward += 25
+            else:
+                reward -= 25
+
+        # Vertical Movement (if needed)
+        # reward += (info['y_pos'] - self.prev_y_pos) * VERTICAL_MOVEMENT_REWARD
+
+        # Adjust reward for death
+        if done and info['life'] < self.prev_info['life']:
+            reward -= 100
+
+
+        # Clip the reward to a reasonable range to prevent any single event from having too much influence
+        reward = max(-100, min(reward, 100))
+
+        return reward
 
 def apply_wrappers(env, index=None):
     env = SkipFrame(env, skip=4, index=index) # Num of frames to apply one action to

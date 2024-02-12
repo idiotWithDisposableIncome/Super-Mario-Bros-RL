@@ -19,6 +19,14 @@ class Agent:
                  batch_size=32, 
                  sync_network_rate=25000):
         
+        # Initialize previous state values
+        self.prev_x_pos = 0
+        self.prev_coins = 0
+        self.prev_score = 0
+        self.prev_time = 0
+        self.prev_life = 0
+        self.prev_status = 'small'
+
         self.num_actions = num_actions
         self.learn_step_counter = 0
 
