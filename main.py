@@ -80,8 +80,9 @@ if __name__ == '__main__':
     LOGGING_PATH = 'logs'
 
     create_directory(LOGGING_PATH)
-
-    logging.basicConfig(filename='logs/training.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    current_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    log_filename = f"logs/logfile_{current_date}.log"
+    logging.basicConfig(filename=log_filename, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     if torch.cuda.is_available():
         print("Using CUDA device:", torch.cuda.get_device_name(0))
