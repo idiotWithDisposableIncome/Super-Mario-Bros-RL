@@ -41,7 +41,7 @@ class SkipFrame(Wrapper):
     def calculate_reward(self, info, done):
         reward = 0
         # Progression
-        reward += info['x_pos'] - self.prev_info['x_pos']
+        reward += max(-25, min( ( (info['x_pos'] - self.prev_info['x_pos'] ) * 3 ) , 25) )
 
         # Coins
         reward += (info['coins'] - self.prev_info['coins']) * 1
