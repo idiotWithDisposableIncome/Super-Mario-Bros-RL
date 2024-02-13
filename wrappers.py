@@ -54,7 +54,7 @@ class SkipFrame(Wrapper):
         reward -= (self.prev_info['life'] - info['life']) * 100
 
         # Score
-        reward += max(-25, min((info['score'] - self.prev_info['score'] ) * 1, 25))
+        reward += max(-25, min( int((info['score'] - self.prev_info['score'] ) * 0.01), 25))
 
         # Time Penalty
         reward -= (self.prev_info['time'] - info['time']) * 1
@@ -62,9 +62,9 @@ class SkipFrame(Wrapper):
         # Check for power-up status change (small, tall, fire)
         if info['status'] != self.prev_info['status']:
             if info['status'] != 'small':
-                reward += 25
+                reward += 30
             else:
-                reward -= 25
+                reward -= 35
 
         # Vertical Movement (if needed)
         # reward += (info['y_pos'] - self.prev_y_pos) * VERTICAL_MOVEMENT_REWARD
