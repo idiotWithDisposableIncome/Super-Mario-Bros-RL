@@ -35,6 +35,7 @@ class SkipFrame(Wrapper):
         return next_state, total_reward, done, trunc, info
     def reset(self, **kwargs):
         state, info = self.env.reset(**kwargs)
+        self.prev_info = None
         return state, info
 
     def calculate_reward(self, info, done):
