@@ -10,6 +10,7 @@ class SkipFrame(Wrapper):
         self.index = index
         self.counter = 0
         self.prev_info = None
+        self.furthest_x = 0
     
     def step(self, action):
         total_reward = 0.0
@@ -36,15 +37,19 @@ class SkipFrame(Wrapper):
     def reset(self, **kwargs):
         state, info = self.env.reset(**kwargs)
         self.prev_info = None
+        self.furthest_x = 0
         return state, info
 
     def calculate_reward(self, info, done):
         reward = 0
         # Progression
-        reward += max(-25, min( ( (info['x_pos'] - self.prev_info['x_pos'] ) * 3 ) , 25) )
+        reward += max(-25, min( ( (info['x_pos'] - self.furthest_x ) * 3 ) , 25) )
+        #set new furthest
+        if self.furthest_x < info['x_pos']:
+            self.furthest_x = info['x_pos']
 
         # Coins
-        reward += (info['coins'] - self.prev_info['coins']) * 1
+        reward += max(-5,min( (info['coins'] - self.prev_info['coins']) * 1, 5) )
 
         # Flag Get (end of level)
         if info['flag_get']:
@@ -77,6 +82,12 @@ class SkipFrame(Wrapper):
         # Clip the reward to a reasonable range to prevent any single event from having too much influence
         reward = max(-100, min(reward, 100))
 
+        if self.prev_info['life'] > info['life']:
+            self.furthest_x = 0
+            self.prev_info['x_pos'] = 0
+        if self.prev_info['world'] > info['world']:
+            self.furthest_x = 0
+            self.prev_info['x_pos'] = 0
         return reward
 
 def apply_wrappers(env, index=None):

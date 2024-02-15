@@ -27,6 +27,7 @@ class Agent:
         self.prev_life = 0
         self.prev_status = 'small'
 
+
         self.num_actions = num_actions
         self.learn_step_counter = 0
 

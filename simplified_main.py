@@ -18,7 +18,7 @@ env = apply_wrappers(env)
 
 agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
 
-agent.load_model("models/model_processor_0_episode_25052.pt")
+agent.load_model("models/model_processor_0_episode_14983.pt")
 #agent.epsilon = 0.2
 #agent.eps_min = 0.0
 #agent.eps_decay = 0.0
@@ -31,7 +31,7 @@ for i in range(NUM_OF_EPISODES):
         new_state, reward, done, truncated, info  = env.step(a)
         
         agent.store_in_memory(state, a, reward, new_state, done)
-        agent.learn()
+        #agent.learn()
 
         state = new_state
 
