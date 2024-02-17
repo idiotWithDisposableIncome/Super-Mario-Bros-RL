@@ -85,7 +85,7 @@ class SkipFrame(Wrapper):
         if self.prev_info['life'] > info['life']:
             self.furthest_x = 0
             self.prev_info['x_pos'] = 0
-        if self.prev_info['world'] > info['world']:
+        if info['world'] > self.prev_info['world']:
             self.furthest_x = 0
             self.prev_info['x_pos'] = 0
         return reward
