@@ -18,10 +18,10 @@ env = apply_wrappers(env)
 
 agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)
 
-agent.load_model("models/model_processor_0_episode_14983.pt")
-#agent.epsilon = 0.2
-#agent.eps_min = 0.0
-#agent.eps_decay = 0.0
+agent.load_model("models\model_processor_2_episode_24985.pt")
+agent.epsilon = 0.05
+agent.eps_min = 0.0
+agent.eps_decay = 0.0
 
 for i in range(NUM_OF_EPISODES):
     done = False
