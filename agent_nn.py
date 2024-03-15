@@ -38,6 +38,13 @@ class AgentNN(nn.Module):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.to(self.device)
 
+    @staticmethod
+    def init_weights(m):
+        if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+            torch.nn.init.kaiming_uniform_(m.weight, nonlinearity='relu')
+            if m.bias is not None:
+                m.bias.data.fill_(0.01)  # Initialize bias with a small value if present
+
     def forward(self, x):
         #print(f"Input shape to CNN: {x.shape}")  # Debug print
         conv_out = self.conv_layers(x).view(x.size()[0], -1)

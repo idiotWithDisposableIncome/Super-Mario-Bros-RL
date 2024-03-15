@@ -43,23 +43,23 @@ class SkipFrame(Wrapper):
     def calculate_reward(self, info, done):
         reward = 0
         # Progression
-        reward += max(-25, min( ( (info['x_pos'] - self.furthest_x ) * 3 ) , 25) )
+        reward += max(-15, min( ( (info['x_pos'] - self.furthest_x ) * 3 ) , 25) )
         #set new furthest
         if self.furthest_x < info['x_pos']:
             self.furthest_x = info['x_pos']
 
         # Coins
-        reward += max(-5,min( (info['coins'] - self.prev_info['coins']) * 1, 5) )
+        reward += max(-5,min( (info['coins'] - self.prev_info['coins']) * 1, 10) )
 
         # Flag Get (end of level)
         if info['flag_get']:
             reward += 100
 
         # Lives
-        reward -= (self.prev_info['life'] - info['life']) * 100
+        reward -= (self.prev_info['life'] - info['life']) * 85
 
         # Score
-        reward += max(-25, min( int((info['score'] - self.prev_info['score'] ) * 0.01), 25))
+        reward += max(-15, min( int((info['score'] - self.prev_info['score'] ) * 0.01), 25))
 
         # Time Penalty
         reward -= (self.prev_info['time'] - info['time']) * 1
@@ -69,14 +69,14 @@ class SkipFrame(Wrapper):
             if info['status'] != 'small':
                 reward += 30
             else:
-                reward -= 35
+                reward -= 20
 
         # Vertical Movement (if needed)
         # reward += (info['y_pos'] - self.prev_y_pos) * VERTICAL_MOVEMENT_REWARD
 
         # Adjust reward for death
         if done and info['life'] < self.prev_info['life']:
-            reward -= 100
+            reward -= 85
 
 
         # Clip the reward to a reasonable range to prevent any single event from having too much influence
