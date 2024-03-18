@@ -10,6 +10,11 @@ import numpy as np
 from utils import *
 import logging
 import multiprocessing as mp
+import stable_baselines3
+from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.env_util import make_atari_env
+from stable_baselines3.common.evaluation import evaluate_policy
 
 
 #from PIL import Image
@@ -165,12 +170,12 @@ if __name__ == '__main__':
                 total_rewards_current_episode[index] += reward
                 states[index] = next_state
                 if done:
-                    env_dif[index] = 0
+                    env_dif[index] = 0 
                     # total episodes played for this environment
                     total_episodes_played[index] += 1
                     #overall total reward
                     total_reward += total_rewards_current_episode[index]
-                    #set env total reward
+                    #set env total reward adding comment exp
                     env_total_reward[index] += total_rewards_current_episode[index]
                     #overall average reward
                     average_total_reward = total_reward / sum(total_episodes_played)
