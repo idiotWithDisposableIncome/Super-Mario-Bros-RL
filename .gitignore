@@ -1,4 +1,7 @@
 __pycache__/
 test.py
 models/
+video/
+frames/
+logs/
 *.png

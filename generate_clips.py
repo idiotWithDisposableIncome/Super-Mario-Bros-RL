@@ -1,5 +1,5 @@
 import gym_super_mario_bros
-from gym_super_mario_bros.actions import RIGHT_ONLY
+from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
 from nes_py.wrappers import JoypadSpace
 from agent import Agent
 
@@ -49,7 +49,7 @@ NUM_OF_EPISODES = 1_000
 controllers = [Image.open(f"controllers/{i}.png") for i in range(5)]
 
 env = gym_super_mario_bros.make(ENV_NAME, render_mode='rgb_array', apply_api_compatibility=True)
-env = JoypadSpace(env, RIGHT_ONLY)
+env = JoypadSpace(env, COMPLEX_MOVEMENT)
 env = apply_wrappers(env)
 
 agent = Agent(input_dims=env.observation_space.shape, num_actions=env.action_space.n)

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  my_app:
+    build:
+      context: .
+      dockerfile: marioBros1
+    runtime: nvidia
+    volumes:
+      - /mnt/nvme0/models:/app/models
+      - /mnt/nvme0/logs:/app/logs
+    ports:
+      - "8080:80"
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - capabilities: ["gpu"]
